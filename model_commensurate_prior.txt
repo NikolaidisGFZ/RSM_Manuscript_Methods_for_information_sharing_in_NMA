@@ -1,0 +1,151 @@
+# Binomial likelihood, logit link
+# Fixed effect model
+
+
+model{                               # *** PROGRAM STARTS
+
+
+######### ADULTS CODE
+for(i in 1:ns.ad){                              # LOOP THROUGH ADULTS STUDIES
+
+    mu[i] ~ dnorm(0,.0001)      # vague priors for all trial baselines
+    
+         for (k in 1:na[i])  {       # LOOP THROUGH ARMS
+        r[i,k] ~ dbin(p[i,k],n[i,k])    # binomial likelihood
+# model for linear predictor
+        logit(p[i,k]) <- mu[i] + d.ad[t[i,k]] - d.ad[t[i,1]] + (beta.ad.dur[t[i,k]] - beta.ad.dur[t[i,1]])*(duration[i] - mx.ad.dur) 
+
+        rhat[i,k] <- p[i,k] * n[i,k]
+        dev[i,k] <- 2 * (r[i,k] * (log(r[i,k])-log(rhat[i,k])) + (n[i,k]-  r[i,k])*(log(n[i,k]-r[i,k]) - log(n[i,k]-rhat[i,k])))
+                             }      # Close LOOP THROUGH ARMS
+
+resdev[i] <- sum(dev[i,1:na[i]]) # residual deviance for adults studies
+
+                 }                         # Adults studies Loop closes   
+
+d.ad[1]<-0    # treatment effect is zero for reference treatment
+
+
+# vague prior for d.ad[2] for treatment effects
+# Informative prior for d.ad[3]
+
+# we want to express the following prior belief
+# m[3] ~ N(d.neon[3], s^2)
+# But m[3] = d.ad.uncent[3] + beta.ad.dur[3]*3
+#          =(d.ad[3] - beta.ad.dur[3]*mx.ad.dur) + beta.ad.dur[3]*3
+
+# So(d.ad[3] - beta.ad.dur[3]*mx.ad.dur) + beta.ad.dur[3]*3 ~ N(d.neon[3], s^2)
+
+#and d.ad[3] ~ N( d.neon[3] + beta.ad.dur[3]*mx.ad.dur - beta.ad.dur[3]*3, s^2)
+
+
+# Commensurate prior for d.ad
+
+for(k in 2:nt){  d.ad[k]~dnorm(trans[k], ssprec) 
+trans[k] <- d.neon[k] + beta.ad.dur[k]*mx.ad.dur - beta.ad.dur[k]*3
+}
+
+## ssprec = 1000 forces commensurability
+## ssprec = 0.001 disconnects adults and neonates
+##  ssprec ~ dgamma(.01, .01) # Standard WinBUGS vague hyperprior
+
+tee[1] ~ dnorm(20,1)                         # R_tau is (essentially) 20
+tee[2] ~ dgamma(0.1, 0.1)I(0.1, 5)    # replacement for the true slab
+flip ~ dbern(0.5)                                # p_tau is 0.5
+pick <- flip + 1
+ssprec <- tee[pick]
+sstau <- sqrt(1/ssprec)
+
+# additional code to implement equal interactions
+beta.ad.dur[1]<-0 # covariate effect is zero for reference treatment
+
+for(k in 2:nt){ # Loop through treatments
+beta.ad.dur[k] <- B.ad.dur   # common covariate effects
+}
+
+B.ad.dur ~ dnorm(0,0.0001) # Prior for common regression parameter
+
+mx.ad.dur<-mean(duration[1:ns.ad]) # set to 0 for no centering
+
+for(k in 2:nt){
+d.ad.uncent[k]<- d.ad[k] - (beta.ad.dur[k]*mx.ad.dur)
+}
+
+
+
+for(j in 1:7){ # prediction for 1-7 days of duration
+
+m[j] <- d.ad.uncent[3] + beta.ad.dur[3]*j # LOR prediction
+
+or[j]<- exp(m[j])
+
+}
+
+
+
+######### END ADULTS CODE
+
+
+
+
+########## NEONATES
+for(i in ns.ad+1:ns.ad+ns.neon){                # LOOP THROUGH NEONATES STUDIES
+
+    mu[i] ~ dnorm(0,.0001)      # vague priors for all trial baselines
+    
+        for (k in 1:na[i])  {       # LOOP THROUGH ARMS
+        r[i,k] ~ dbin(p[i,k],n[i,k])    # binomial likelihood
+ # model for linear predictor 
+        logit(p[i,k]) <- mu[i] + d.neon[t[i,k]] - d.neon[t[i,1]] 
+
+
+        rhat[i,k] <- p[i,k] * n[i,k]
+        dev[i,k] <- 2 * (r[i,k] * (log(r[i,k])-log(rhat[i,k])) + (n[i,k]-  r[i,k])*(log(n[i,k]-r[i,k]) - log(n[i,k]-rhat[i,k])))
+                             }      # Close LOOP THROUGH ARMS
+
+resdev[i] <- sum(dev[i,1:na[i]]) # residual deviance for neoantes studies
+
+                               }           # Neonates studies Loop closes   
+
+d.neon[1]<-0    # treatment effect is zero for reference treatment
+
+# vague priors for treatment effects
+for (k in 2:nt){  d.neon[k] ~ dnorm(0,.0001) }
+
+# pairwise ORs and LORs for all possible pair-wise comparisons
+for (c in 1:(nt-1)) {  
+     for (k in (c+1):nt)  { 
+          or.neon[c,k] <- exp(d.neon[k] - d.neon[c])
+          lor.neon[c,k] <- (d.neon[k]-d.neon[c])
+         }  
+     }
+
+
+# additional code to implement equal interactions
+
+
+for(k in 2:nt){
+d.neon.uncent[k]<- d.neon[k] 
+}
+
+m.neon.ivig.vs.alb <-d.neon.uncent[3] 
+
+########### END NEONATES CODE
+
+resdev.ad<-sum(resdev[1:ns.ad])
+resdev.neon<-sum(resdev[ns.ad+1:ns.ad+ns.neon])
+
+totresdev <- sum(resdev[]) # Total residual deviance from all adults and neonates studies
+
+
+dum[1]<- pub.year[1]
+dum[2]<- jadad[1]
+dum[3]<- dosage[1]
+dum[4]<- duration[1]
+dum[5]<- pop[1]
+dum[6]<- trans.sample[1]
+
+
+
+
+}           # *** PROGRAM ENDS

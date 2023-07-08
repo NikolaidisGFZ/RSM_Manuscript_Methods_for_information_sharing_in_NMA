@@ -1,0 +1,99 @@
+
+# Binomial likelihood, logit link
+# Fixed effect model
+
+
+model{                               # *** PROGRAM STARTS
+
+
+######### ADULTS CODE
+for(i in 1:ns.ad){                              # LOOP THROUGH ADULTS STUDIES
+
+    mu[i] ~ dnorm(0,.0001)      # vague priors for all trial baselines
+    
+         for (k in 1:na[i])  {       # LOOP THROUGH ARMS
+        r[i,k] ~ dbin(p[i,k],n[i,k])    # binomial likelihood
+# model for linear predictor
+        logit(p[i,k]) <- mu[i] + d.ad[t[i,k]] - d.ad[t[i,1]] + (beta.ad.dur[t[i,k]] - beta.ad.dur[t[i,1]])*(duration[i] - mx.ad.dur) 
+
+        rhat[i,k] <- p[i,k] * n[i,k]
+        dev[i,k] <- 2 * (r[i,k] * (log(r[i,k])-log(rhat[i,k])) + (n[i,k]-  r[i,k])*(log(n[i,k]-r[i,k]) - log(n[i,k]-rhat[i,k])))
+                             }      # Close LOOP THROUGH ARMS
+
+resdev[i] <- sum(dev[i,1:na[i]]) # residual deviance for adults studies
+
+                 }                         # Adults studies Loop closes   
+
+const<-10000
+
+for(i in ns.ad+1:ns.ad+ns.neon){                              # LOOP THROUGH ADULTS STUDIES
+
+    mu[i] ~ dnorm(0,.0001)      # vague priors for all trial baselines
+    
+         for (k in 1:na[i])  {       # LOOP THROUGH ARMS
+
+zeros[i,k]<-0
+zeros[i,k] ~ dpois(phi[i,k])
+phi[i,k] <- alpha * neg.LL[i,k] + const  
+neg.LL[i,k] <- - logfact(n[i,k]) + logfact(r[i,k]) + logfact(n[i,k] - r[i,k]) - r[i,k]*log(p[i,k]) - (n[i,k] - r[i,k])*log(1-p[i,k])
+
+# model for linear predictor
+        logit(p[i,k]) <- mu[i] + d.ad[t[i,k]] - d.ad[t[i,1]] + (beta.ad.dur[t[i,k]] - beta.ad.dur[t[i,1]])*(duration[i] - mx.ad.dur) 
+
+        rhat[i,k] <- p[i,k] * n[i,k]
+        dev[i,k] <- 2 * (r[i,k] * (log(r[i,k])-log(rhat[i,k])) + (n[i,k]-  r[i,k])*(log(n[i,k]-r[i,k]) - log(n[i,k]-rhat[i,k])))
+                             }      # Close LOOP THROUGH ARMS
+
+resdev[i] <- sum(dev[i,1:na[i]]) # residual deviance for adults studies
+
+                 }                         # Adults studies Loop closes 
+
+d.ad[1]<-0    # treatment effect is zero for reference treatment
+
+# vague priors for treatment effects
+for (k in 2:nt){  d.ad[k] ~ dnorm(0,.0001) }
+
+
+
+# additional code to implement equal interactions
+beta.ad.dur[1]<-0 # covariate effect is zero for reference treatment
+
+for(k in 2:nt){ # Loop through treatments
+beta.ad.dur[k] <- B.ad.dur   # common covariate effects
+}
+
+B.ad.dur ~ dnorm(0,0.0001) # Prior for common regression parameter
+
+mx.ad.dur<-mean(duration[1:ns.ad]) # set to 0 for no centering
+
+for(k in 2:nt){
+d.ad.uncent[k]<- d.ad[k] - (beta.ad.dur[k]*mx.ad.dur)
+}
+
+
+
+for(j in 1:7){ # prediction for 1-7 days of duration
+
+m[j] <- d.ad.uncent[3] + beta.ad.dur[3]*j # LOR prediction
+
+or[j]<- exp(m[j])
+
+}
+
+
+######### END ADULTS CODE
+
+resdev.ad<-sum(resdev[1:ns.ad])
+resdev.neon<-sum(resdev[ns.ad+1:ns.ad+ns.neon])
+
+totresdev <- sum(resdev[]) # Total residual deviance from all adults and neonates studies
+
+
+dum[1]<- pub.year[1]
+dum[2]<- jadad[1]
+dum[3]<- dosage[1]
+dum[4]<- duration[1]
+dum[5]<- pop[1]
+dum[6]<- trans.sample[1]
+
+}           # *** PROGRAM ENDS 

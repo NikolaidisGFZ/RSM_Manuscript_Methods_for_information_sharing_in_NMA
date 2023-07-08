@@ -1,0 +1,117 @@
+Fixed Effects Meta-Regression on Duration of treatment for adults, simple FE for neonates 
+
+Pr-2a. (neonates studies have been analysed separately and their RTE distribution has been estimated). This will come in here only as data
+
+Using the RTE of neonates combined with a non-indormative component as an informative prior  for the RTE of adults
+
+T3b
+=============================
+Treatment codes
+1	Albumin
+2    PLA
+3	IVIGAM
+=============================
+
+
+# Binomial likelihood, logit link
+# Random effects model for multi-arm trials
+
+model{                               # *** PROGRAM STARTS
+
+
+######### ADULTS CODE
+for(i in 1:ns.ad){                              # LOOP THROUGH ADULTS STUDIES
+
+    mu[i] ~ dnorm(0,.0001)      # vague priors for all trial baselines
+    
+         for (k in 1:na[i])  {       # LOOP THROUGH ARMS
+        r[i,k] ~ dbin(p[i,k],n[i,k])    # binomial likelihood
+# model for linear predictor
+        logit(p[i,k]) <- mu[i] + d.ad[t[i,k]] - d.ad[t[i,1]] + (beta.ad.dur[t[i,k]] - beta.ad.dur[t[i,1]])*(duration[i] - mx.ad.dur) 
+
+        rhat[i,k] <- p[i,k] * n[i,k]
+        dev[i,k] <- 2 * (r[i,k] * (log(r[i,k])-log(rhat[i,k])) + (n[i,k]-  r[i,k])*(log(n[i,k]-r[i,k]) - log(n[i,k]-rhat[i,k])))
+                             }      # Close LOOP THROUGH ARMS
+
+resdev[i] <- sum(dev[i,1:na[i]]) # residual deviance for adults studies
+
+                 }                         # Adults studies Loop closes   
+
+d.ad[1]<-0    # treatment effect is zero for reference treatment
+
+# Informative priors for adults treatment effects
+# Two components : 1. the RTE of neonates 2. a vague
+# Mix the two components according to probability vector P
+# essentially p, (1-p)
+# The probability vector is estimated in the model
+# The component distributions are the lambdas
+
+# For comparison ALB.vs.PLA
+d.ad[2]<-lambda2[T2]            
+T2~dcat(P2[])                 
+P2[1:2]~ddirch(alpha[])       
+lambda2[1]~dnorm(trans[2], prec.d.neon[2]) 
+lambda2[2]~dnorm(0, .001)
+
+# For comparison ALB.vs.IVIG
+d.ad[3]<-lambda3[T3]           # the prior 
+T3~dcat(P3[])                  # the distribution indicator
+P3[1:2]~ddirch(alpha[])       # the probabilities vector
+lambda3[1]~dnorm(trans[3], prec.d.neon[3]) # The informative compon
+lambda3[2]~dnorm(0, .001)    # the vague component
+
+
+for(k in 2:nt){
+trans[k] <- d.neon[k] + beta.ad.dur[k]*mx.ad.dur - beta.ad.dur[k]*3
+prec.d.neon[k] <- pow(sd.d.neon[k],-2)
+}
+
+sd.d.neon[3]<- sd.d.neon.alb.vs.ivig
+sd.d.neon[2]<- sd.d.neon.alb.vs.pla
+d.neon[3]<- d.neon.alb.vs.ivig
+d.neon[2]<- d.neon.alb.vs.pla
+
+
+# additional code to implement equal interactions
+beta.ad.dur[1]<-0 # covariate effect is zero for reference treatment
+
+for(k in 2:nt){ # Loop through treatments
+beta.ad.dur[k] <- B.ad.dur   # common covariate effects
+}
+
+B.ad.dur ~ dnorm(0,0.0001) # Prior for common regression parameter
+
+mx.ad.dur<-mean(duration[1:ns.ad]) # set to 0 for no centering
+
+for(k in 2:nt){
+d.ad.uncent[k]<- d.ad[k] - (beta.ad.dur[k]*mx.ad.dur)
+}
+
+
+
+for(j in 1:7){ # prediction for 1-7 days of duration
+
+m[j] <- d.ad.uncent[3] + beta.ad.dur[3]*j # LOR prediction
+
+or[j]<- exp(m[j])
+
+}
+
+
+######### END ADULTS CODE
+
+
+resdev.ad<-sum(resdev[1:ns.ad])
+
+totresdev <- sum(resdev[]) # Total residual deviance from all adults and neonates studies
+
+dum[1]<- pub.year[1]
+dum[2]<- jadad[1]
+dum[3]<- dosage[1]
+dum[4]<- duration[1]
+dum[5]<- pop[1]
+dum[6]<- trans.sample[1]
+
+
+
+}           # *** PROGRAM ENDS 
